@@ -1,13 +1,17 @@
-import type {
-  User,
-  ChannelSort,
-  ChannelFilters,
-  ChannelOptions,
+import {
+  type User,
+  type ChannelSort,
+  type ChannelFilters,
+  type ChannelOptions,
+  Channel,
+  Event,
+  DefaultGenerics,
+  MessageResponse,
 } from "stream-chat";
 import {
   useCreateChatClient,
   Chat,
-  Channel,
+  Channel as ChannelComponent,
   ChannelHeader,
   ChannelList,
   MessageInput,
@@ -21,8 +25,8 @@ import "./layout.css";
 import axios from "axios";
 import { useEffect, useState } from "react";
 
-const userId = "Thomas";
-const userName = "Thomas";
+const userId = "John";
+const userName = "John";
 
 const user: User = {
   id: userId,
@@ -43,15 +47,15 @@ const response = await axios.post("http://localhost:5500/join", {
   username: userName,
 });
 
-console.log(response.data);
-
 const userToken = response.data.token;
 const apiKey = response.data.api_key;
 
-const App =  () => {
-  const [channel, setChannel] = useState(null);
+const App = () => {
+  const [channel, setChannel] = useState<
+    Channel<DefaultGenerics> | undefined
+  >();
   const [loading, setLoading] = useState(true);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<MessageResponse<DefaultGenerics>[]>([]);
 
   const client = useCreateChatClient({
     apiKey,
@@ -62,7 +66,7 @@ const App =  () => {
   useEffect(() => {
     const setupChannel = async () => {
       if (client) {
-        const channelDef = client.channel('messaging', 'discuss');
+        const channelDef = client.channel("messaging", "discuss");
         await channelDef.watch();
         setChannel(channelDef);
         setLoading(false);
@@ -75,35 +79,37 @@ const App =  () => {
   if (!client) return <div>Setting up client & connection...</div>;
   if (loading) return <div>Loading...</div>;
 
-  const addSentiment = (text, sentiment) => {
+  const addSentiment = (text: string, sentiment: string) => {
     return `${text} [${sentiment}]`;
-  }
+  };
 
-  channel?.on('message.new', async event => {
-    console.log("event: ", JSON.stringify(event));
+  channel?.on("message.new", async (event: Event<DefaultGenerics>) => {
+    if (event.message?.text) {
+      const response = await axios.post("http://localhost:5500/sentiment", {
+        text: event.message.text,
+      });
 
-    const response = await axios.post("http://localhost:5500/sentiment", {
-      text: event.message.text,
-    });
-    
-    console.log(response.data);
-    const messageWithSentiment = {...event.message};
-    messageWithSentiment.text = addSentiment(event.message.text, response.data.sentiment);
-    
-    setMessages([...messages, messageWithSentiment]);
+      const messageWithSentiment: MessageResponse<DefaultGenerics> = { ...event.message };
+      messageWithSentiment.text = addSentiment(
+        event.message.text,
+        response.data.sentiment
+      );
+
+      setMessages([...messages, messageWithSentiment]);
+    }
   });
 
   return (
     <Chat client={client} theme="str-chat__theme-custom">
       <ChannelList filters={filters} sort={sort} options={options} />
-      <Channel>
+      <ChannelComponent>
         <Window>
           <ChannelHeader />
-          <MessageList messages={messages}/>
+          <MessageList messages={messages} />
           <MessageInput />
         </Window>
         <Thread />
-      </Channel>
+      </ChannelComponent>
     </Chat>
   );
 };
